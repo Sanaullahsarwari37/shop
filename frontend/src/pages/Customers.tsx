@@ -1,7 +1,9 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { api, formatMoney } from "../lib/api";
+import { api } from "../lib/api";
+import { useSettings } from "../contexts/SettingsContext";
 import { Plus, Users, CreditCard, ArrowLeft, Eye, Pencil, Trash2 } from "lucide-react";
+import { DeleteAllButton } from "../components/ListToolbar";
 import { format } from "date-fns";
 import { useLanguage } from "../i18n/LanguageContext";
 import { useToast } from "../components/Toast";
@@ -9,6 +11,7 @@ import ConfirmDialog from "../components/ConfirmDialog";
 
 export default function Customers() {
   const { t } = useLanguage();
+  const { formatMoney } = useSettings();
   const { toast } = useToast();
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -20,7 +23,7 @@ export default function Customers() {
   const [loanQty, setLoanQty] = useState("1");
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [payAmount, setPayAmount] = useState("");
-  const [deleteTarget, setDeleteTarget] = useState<{ id: number; name: string } | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<{ id?: number; name?: string; all?: boolean } | null>(null);
   const [form, setForm] = useState({ name: "", phone: "", address: "" });
   const qc = useQueryClient();
 
@@ -68,13 +71,23 @@ export default function Customers() {
   });
 
   const deleteMut = useMutation({
-    mutationFn: (id: number) => api.deleteCustomer(id),
-    onSuccess: async () => {
-      await qc.refetchQueries({ queryKey: ["customers"] });
-      await qc.invalidateQueries({ queryKey: ["dashboard"] });
+    mutationFn: async () => {
+      if (!deleteTarget) return;
+      if (deleteTarget.all) {
+        const ids = customers.map((c: any) => c.id as number);
+        const res = await api.deleteCustomersBulk(ids);
+        const failed = (res.results || []).filter((r: any) => !r.ok);
+        if (failed.length) throw new Error(failed.map((f: any) => f.error).join("; "));
+      } else if (deleteTarget.id != null) {
+        await api.deleteCustomer(deleteTarget.id);
+      }
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["customers"] });
+      qc.invalidateQueries({ queryKey: ["dashboard"] });
       setDeleteTarget(null);
-      if (selectedId === deleteTarget?.id) setSelectedId(null);
-      toast(t("common.success"), "success");
+      setSelectedId(null);
+      toast(t("customers.deleted") || "Deleted", "success");
     },
     onError: (e: Error) => toast(e.message, "error"),
   });
@@ -235,7 +248,7 @@ export default function Customers() {
               {ledgerEntries.length === 0 ? (
                 <p className="p-8 text-center text-slate-500">{t("common.noData")}</p>
               ) : (
-                <div className="overflow-x-auto">
+                <div className="table-wrap overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b border-slate-200 dark:border-slate-800 text-start text-slate-500">
@@ -327,13 +340,20 @@ export default function Customers() {
           <h1 className="text-2xl font-semibold tracking-tight">{t("customers.title")}</h1>
           <p className="text-sm text-slate-500 mt-1">{t("customers.subtitle")}</p>
         </div>
-        <button
-          type="button"
-          onClick={() => { resetForm(); setShowForm(true); }}
-          className="inline-flex items-center gap-2 px-4 py-2.5 bg-primary-600 hover:bg-primary-700 text-white rounded-lg text-sm font-medium"
-        >
-          <Plus size={16} /> {t("customers.addCustomer")}
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <DeleteAllButton
+            label={t("common.deleteAll", "Delete all")}
+            count={customers.length}
+            onClick={() => setDeleteTarget({ all: true })}
+          />
+          <button
+            type="button"
+            onClick={() => { resetForm(); setShowForm(true); }}
+            className="inline-flex items-center gap-2 px-4 py-2.5 btn-primary rounded-xl text-sm font-semibold"
+          >
+            <Plus size={16} /> {t("customers.addCustomer")}
+          </button>
+        </div>
       </div>
 
       {showForm && (
@@ -373,7 +393,7 @@ export default function Customers() {
             <p className="text-slate-500">{t("customers.noCustomers")}</p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
+          <div className="table-wrap overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-slate-200 dark:border-slate-800 text-start text-slate-500">
@@ -472,11 +492,17 @@ export default function Customers() {
       <ConfirmDialog
         open={deleteTarget != null}
         title={t("common.delete")}
-        message={deleteTarget ? `${deleteTarget.name}: ${t("customers.confirmDeleteHistory")}` : t("customers.confirmDeleteHistory")}
+        message={
+          deleteTarget?.all
+            ? t("customers.confirmDeleteAll", "Delete all customers and their payment history? This cannot be undone.")
+            : deleteTarget
+              ? `${deleteTarget.name}: ${t("customers.confirmDelete", "Delete this customer and their history?")}`
+              : t("customers.confirmDelete", "Delete this customer?")
+        }
         danger
         loading={deleteMut.isPending}
         onCancel={() => setDeleteTarget(null)}
-        onConfirm={() => deleteTarget && deleteMut.mutate(deleteTarget.id)}
+        onConfirm={() => deleteMut.mutate()}
       />
     </div>
   );

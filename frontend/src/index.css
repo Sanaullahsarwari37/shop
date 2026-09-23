@@ -1,6 +1,5 @@
 @import "tailwindcss";
 
-/* Class-based dark mode (required so .dark on <html> works in Tailwind v4) */
 @custom-variant dark (&:where(.dark, .dark *));
 
 @theme {
@@ -9,58 +8,217 @@
   --color-primary-200: #bae6fd;
   --color-primary-300: #7dd3fc;
   --color-primary-400: #38bdf8;
-  --color-primary-500: #0ea5e9;
-  --color-primary-600: #0284c7;
-  --color-primary-700: #0369a1;
+  --color-primary-500: var(--color-primary-500, #0ea5e9);
+  --color-primary-600: var(--color-primary-600, #0284c7);
+  --color-primary-700: var(--color-primary-700, #0369a1);
   --color-primary-800: #075985;
   --color-primary-900: #0c4a6e;
-  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: var(--font-en, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif);
 
-  --color-background: #f8fafc;
-  --color-foreground: #0f172a;
-  --color-card: #ffffff;
-  --color-card-foreground: #0f172a;
-  --color-muted: #f1f5f9;
-  --color-muted-foreground: #64748b;
-  --color-border: #e2e8f0;
-  --color-ring: #0ea5e9;
-}
-
-.dark {
-  --color-background: #020617;
-  --color-foreground: #f1f5f9;
-  --color-card: #0f172a;
-  --color-card-foreground: #f1f5f9;
-  --color-muted: #1e293b;
-  --color-muted-foreground: #94a3b8;
-  --color-border: #334155;
-  --color-ring: #38bdf8;
+  --color-background: var(--color-background, #f0f9ff);
+  --color-foreground: var(--color-foreground, #0f172a);
+  --color-card: var(--color-card, #ffffff);
+  --color-card-foreground: var(--color-card-foreground, #0f172a);
+  --color-muted: var(--color-muted, #e0f2fe);
+  --color-muted-foreground: var(--color-muted-foreground, #64748b);
+  --color-border: var(--color-border, #bae6fd);
+  --color-ring: var(--color-ring, #0ea5e9);
 }
 
 :root {
   color-scheme: light;
+  --font-en: "Segoe UI", "Segoe UI Variable", system-ui, -apple-system, sans-serif;
+  --font-fa: "Bahij Nazanin", "Bahij Nassim", "XB Zar", Tahoma, "Segoe UI", Arial, sans-serif;
+  --font-ps: "Afghan Kajeki", "Kajeki", "Bahij Nazanin", "Bahij Nassim", Tahoma, "Segoe UI", Arial, sans-serif;
+  --font-scale-rtl: 1.08;
+  --font-weight-rtl: 600;
+  --color-sidebar: #ffffff;
+  --color-sidebar-fg: #0f172a;
+  --color-header: #ffffff;
+  --color-button: #0ea5e9;
+  --color-button-text: #ffffff;
+  --color-background: #f4f6f9;
+  --color-foreground: #0f172a;
+  --color-card: #ffffff;
+  --color-border: #e2e8f0;
+  --color-muted: #eef2f7;
+  --color-primary: #0ea5e9;
 }
 
 .dark {
   color-scheme: dark;
+  --color-background: #0c0c0e;
+  --color-foreground: #ececef;
+  --color-card: #16161a;
+  --color-border: #2e2e36;
+  --color-sidebar: #0c0c0e;
+  --color-sidebar-fg: #ececef;
+  --color-header: #0c0c0e;
+  --color-muted: #222228;
+  --color-primary: #38bdf8;
+  --color-button: #0ea5e9;
+}
+
+/*
+  Professional type scale (dashboard convention):
+  - Root respects browser default (16px) × user preference
+  - rem everywhere so zoom + Settings scale work together
+  - Dense UI body ~14–16px; titles larger
+*/
+html {
+  /* User scale from Settings: 0.93–1.2; default 1 */
+  font-size: calc(100% * var(--font-scale, 1));
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+@media (max-width: 640px) {
+  html {
+    /* Slightly tighter on small phones for density without going below readable */
+    font-size: calc(93.75% * var(--font-scale, 1)); /* ~15px if base 16 */
+  }
+}
+
+@media (min-width: 1280px) {
+  html {
+    font-size: calc(100% * var(--font-scale, 1));
+  }
 }
 
 body {
   background-color: var(--color-background);
   color: var(--color-foreground);
-  font-family: var(--font-sans);
-  antialiased: true;
+  font-family: var(--font-en);
+  font-size: 0.9375rem; /* 15px @ 16 root — dense admin body */
+  line-height: 1.5;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-[dir="rtl"] {
-  font-family: "Noto Naskh Arabic", "Segoe UI", Tahoma, Arial, sans-serif;
+/* Type hierarchy */
+.text-page-title,
+h1.text-2xl {
+  font-size: clamp(1.25rem, 1.1rem + 0.5vw, 1.5rem);
+  line-height: 1.25;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+.text-section-title {
+  font-size: 1rem;
+  font-weight: 600;
+  line-height: 1.35;
+}
+.text-kpi {
+  font-size: clamp(1.35rem, 1.2rem + 0.6vw, 1.75rem);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+}
+.text-ui {
+  font-size: 0.875rem; /* 14px labels / table cells */
+  line-height: 1.45;
+}
+.text-caption {
+  font-size: 0.75rem;
+  line-height: 1.4;
+  color: var(--color-muted-foreground, #64748b);
+}
+
+/* Touch targets ≥ 44px on mobile (WCAG 2.5.8) */
+@media (max-width: 1023px) {
+  .app-sidebar nav a,
+  .app-header button,
+  button.btn-primary {
+    min-height: 2.75rem;
+  }
+}
+
+/* Responsive tables */
+.table-wrap {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
+}
+.table-wrap table {
+  min-width: 36rem;
+}
+
+/* Safe area + content padding on small screens */
+.app-main {
+  padding-left: max(1rem, env(safe-area-inset-left));
+  padding-right: max(1rem, env(safe-area-inset-right));
+  padding-bottom: max(1rem, env(safe-area-inset-bottom));
+}
+
+/* English */
+html[lang="en"] body,
+html[lang="en"] {
+  font-family: var(--font-en);
+  font-weight: 400;
+}
+
+/* Dari (Farsi) — larger + bold for readability */
+html[lang="fa"],
+html[lang="fa"] body,
+[dir="rtl"][lang="fa"] {
+  font-family: var(--font-fa) !important;
+  font-size: inherit;
+  font-weight: var(--font-weight-rtl, 600);
+  letter-spacing: 0;
+  line-height: 1.85;
+}
+
+/* Pashto — same size as English; Kajeki / Bahij family only */
+html[lang="ps"],
+html[lang="ps"] body,
+[dir="rtl"][lang="ps"] {
+  font-family: var(--font-ps) !important;
+  font-size: inherit;
+  font-weight: var(--font-weight-rtl, 600);
+  letter-spacing: 0;
+  line-height: 1.85;
+}
+
+[dir="rtl"] h1,
+[dir="rtl"] h2,
+[dir="rtl"] h3,
+html[lang="fa"] h1,
+html[lang="fa"] h2,
+html[lang="ps"] h1,
+html[lang="ps"] h2 {
+  font-weight: 700;
+  letter-spacing: 0;
 }
 
 [dir="rtl"] .text-left { text-align: right; }
 [dir="rtl"] .text-right { text-align: left; }
 
-/* Form controls – readable in light + dark */
+[dir="rtl"] table,
+[dir="rtl"] th,
+[dir="rtl"] td,
+[dir="rtl"] button,
+[dir="rtl"] input,
+[dir="rtl"] select,
+[dir="rtl"] label {
+  font-family: inherit;
+  font-weight: inherit;
+}
+
+.bg-primary-600 { background-color: var(--color-button) !important; }
+.bg-primary-700 { background-color: var(--color-primary-700) !important; }
+.text-primary-600 { color: var(--color-primary) !important; }
+.text-primary-700 { color: var(--color-primary-700) !important; }
+.border-primary-600 { border-color: var(--color-button) !important; }
+.ring-primary-500 { --tw-ring-color: var(--color-ring) !important; }
+.bg-primary-50 { background-color: color-mix(in srgb, var(--color-primary) 12%, white) !important; }
+.dark .bg-primary-50,
+.dark .bg-primary-900\/30 {
+  background-color: color-mix(in srgb, var(--color-primary) 20%, transparent) !important;
+}
+.text-primary-300 { color: var(--color-primary-500) !important; }
+
 input,
 textarea,
 select {
@@ -72,9 +230,9 @@ select {
 .dark input,
 .dark textarea,
 .dark select {
-  background-color: #0f172a;
-  color: #f1f5f9;
-  border-color: #334155;
+  background-color: var(--color-card);
+  color: var(--color-foreground);
+  border-color: var(--color-border);
   color-scheme: dark;
 }
 
@@ -86,7 +244,7 @@ select optgroup {
 
 .dark select option,
 .dark select optgroup {
-  background-color: #0f172a;
+  background-color: #111827;
   color: #f1f5f9;
 }
 
@@ -105,30 +263,280 @@ textarea::placeholder {
 .dark input:-webkit-autofill,
 .dark textarea:-webkit-autofill,
 .dark select:-webkit-autofill {
-  -webkit-text-fill-color: #f1f5f9;
-  -webkit-box-shadow: 0 0 0 1000px #0f172a inset;
-  caret-color: #f1f5f9;
+  -webkit-text-fill-color: var(--color-foreground);
+  -webkit-box-shadow: 0 0 0 1000px var(--color-card) inset;
+  caret-color: var(--color-foreground);
 }
 
-/* Calendar (shadcn-style) */
 .rdp {
   --rdp-cell-size: 36px;
-  --rdp-accent-color: #0284c7;
+  --rdp-accent-color: var(--color-primary-600, #0284c7);
   --rdp-background-color: transparent;
   margin: 0;
 }
 
 .dark .rdp {
-  --rdp-accent-color: #38bdf8;
-  color: #f1f5f9;
+  --rdp-accent-color: var(--color-primary-500, #38bdf8);
+  color: var(--color-foreground);
 }
 
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb {
-  background: #cbd5e1;
+  background: color-mix(in srgb, var(--color-border) 80%, #64748b);
   border-radius: 9999px;
 }
-.dark ::-webkit-scrollbar-thumb {
-  background: #475569;
+
+/* Premium settings cards */
+.settings-section h2 {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #64748b;
+  margin-bottom: 0.25rem;
+}
+.font-preview-card {
+  border-radius: 0.75rem;
+  border: 1px solid var(--color-border);
+  padding: 0.75rem 1rem;
+  background: color-mix(in srgb, var(--color-muted) 40%, var(--color-card));
+}
+
+
+/* ============================================================
+   Premium designer system — gradient + glass + blur (site-wide)
+   ============================================================ */
+
+:root {
+  --glass-bg: linear-gradient(
+    145deg,
+    rgba(255, 255, 255, 0.82) 0%,
+    rgba(255, 255, 255, 0.55) 100%
+  );
+  --glass-border: rgba(255, 255, 255, 0.45);
+  --glass-shadow: 0 8px 32px rgba(15, 23, 42, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.65);
+  --page-glow: radial-gradient(
+      ellipse 80% 50% at 10% -10%,
+      color-mix(in srgb, var(--color-primary) 18%, transparent),
+      transparent 55%
+    ),
+    radial-gradient(
+      ellipse 60% 40% at 100% 0%,
+      color-mix(in srgb, var(--color-accent, var(--color-primary)) 12%, transparent),
+      transparent 50%
+    );
+}
+
+.dark {
+  --glass-bg: linear-gradient(
+    145deg,
+    rgba(255, 255, 255, 0.08) 0%,
+    rgba(255, 255, 255, 0.03) 100%
+  );
+  --glass-border: rgba(255, 255, 255, 0.1);
+  --glass-shadow: 0 12px 40px rgba(0, 0, 0, 0.45),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  --page-glow: radial-gradient(
+      ellipse 70% 45% at 15% -5%,
+      color-mix(in srgb, var(--color-primary) 22%, transparent),
+      transparent 55%
+    ),
+    radial-gradient(
+      ellipse 50% 35% at 95% 5%,
+      color-mix(in srgb, var(--color-accent, var(--color-primary)) 14%, transparent),
+      transparent 50%
+    );
+}
+
+/* Ambient page background */
+body {
+  background-color: var(--color-background);
+  background-image: var(--page-glow);
+  background-attachment: fixed;
+  min-height: 100vh;
+}
+
+/* Main content canvas */
+.app-main {
+  background: transparent;
+}
+
+/* ——— Sidebar: soft glass + gradient edge ——— */
+.app-sidebar {
+  background: linear-gradient(
+    185deg,
+    color-mix(in srgb, var(--color-sidebar) 88%, transparent) 0%,
+    color-mix(in srgb, var(--color-sidebar) 96%, black) 100%
+  ) !important;
+  color: var(--color-sidebar-fg) !important;
+  border-color: var(--glass-border) !important;
+  backdrop-filter: blur(20px) saturate(1.35);
+  -webkit-backdrop-filter: blur(20px) saturate(1.35);
+  box-shadow: 4px 0 24px rgba(15, 23, 42, 0.06);
+}
+.dark .app-sidebar {
+  box-shadow: 4px 0 32px rgba(0, 0, 0, 0.4);
+}
+
+/* ——— Header: frosted glass bar ——— */
+.app-header {
+  background: color-mix(in srgb, var(--color-header) 55%, transparent) !important;
+  color: var(--color-foreground);
+  border-color: var(--glass-border) !important;
+  backdrop-filter: blur(20px) saturate(1.5);
+  -webkit-backdrop-filter: blur(20px) saturate(1.5);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.35) inset;
+}
+.dark .app-header {
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.05) inset;
+}
+
+/* ——— Cards / tables / panels ——— */
+.app-card,
+.glass,
+.settings-section {
+  background: var(--glass-bg) !important;
+  background-color: color-mix(in srgb, var(--color-card) 70%, transparent) !important;
+  border: 1px solid var(--glass-border) !important;
+  box-shadow: var(--glass-shadow);
+  backdrop-filter: blur(18px) saturate(1.35);
+  -webkit-backdrop-filter: blur(18px) saturate(1.35);
+  border-radius: 1rem;
+}
+
+.settings-section {
+  padding: 1.5rem;
+}
+.settings-section h2 {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #64748b;
+  margin-bottom: 0.25rem;
+}
+.dark .settings-section h2 {
+  color: #94a3b8;
+}
+
+/* Table wrappers often use app-card or white bg */
+table {
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+/* ——— Primary buttons: gradient glow ——— */
+.btn-primary {
+  background: linear-gradient(
+    135deg,
+    var(--color-button) 0%,
+    color-mix(in srgb, var(--color-button) 70%, #000) 100%
+  ) !important;
+  color: var(--color-button-text) !important;
+  border: none !important;
+  box-shadow:
+    0 4px 16px color-mix(in srgb, var(--color-button) 40%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.25);
+  transition: filter 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
+}
+.btn-primary:hover {
+  filter: brightness(1.08);
+  box-shadow:
+    0 6px 22px color-mix(in srgb, var(--color-button) 50%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.3);
+}
+.btn-primary:active {
+  transform: translateY(1px);
+}
+
+/* Inputs — soft glass fields */
+input:not([type="range"]):not([type="checkbox"]):not([type="radio"]),
+textarea,
+select {
+  background: color-mix(in srgb, var(--color-card) 75%, transparent) !important;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border-color: var(--glass-border) !important;
+  box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+.dark input:not([type="range"]):not([type="checkbox"]):not([type="radio"]),
+.dark textarea,
+.dark select {
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.25);
+}
+
+/* Modal backdrop already handled in ConfirmDialog; global overlay helper */
+.glass-overlay {
+  background: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.font-preview-card {
+  border-radius: 0.75rem;
+  border: 1px solid var(--glass-border);
+  padding: 0.75rem 1rem;
+  background: color-mix(in srgb, var(--color-muted) 35%, transparent);
+  backdrop-filter: blur(8px);
+}
+
+
+
+/* Auto-glass for common panel patterns used across pages */
+.rounded-xl.border.bg-white,
+.rounded-2xl.border.bg-white,
+.rounded-xl.border.dark\:bg-slate-900,
+div.rounded-xl.border.border-slate-200,
+div.rounded-2xl.border.border-slate-200 {
+  background: var(--glass-bg) !important;
+  background-color: color-mix(in srgb, var(--color-card) 72%, transparent) !important;
+  backdrop-filter: blur(16px) saturate(1.3);
+  -webkit-backdrop-filter: blur(16px) saturate(1.3);
+  border-color: var(--glass-border) !important;
+  box-shadow: var(--glass-shadow);
+}
+.dark .rounded-xl.border.bg-white,
+.dark .rounded-2xl.border.bg-white,
+.dark div.rounded-xl.border,
+.dark div.rounded-2xl.border {
+  border-color: var(--glass-border) !important;
+}
+
+
+/* Site-wide font application (sidebar, header, cards — not only settings samples) */
+html[lang="en"] .app-sidebar,
+html[lang="en"] .app-header,
+html[lang="en"] .app-main,
+html[lang="en"] .app-card,
+html[lang="en"] button,
+html[lang="en"] input,
+html[lang="en"] select,
+html[lang="en"] table {
+  font-family: var(--font-en);
+}
+
+html[lang="fa"] .app-sidebar,
+html[lang="fa"] .app-header,
+html[lang="fa"] .app-main,
+html[lang="fa"] .app-card,
+html[lang="fa"] button,
+html[lang="fa"] input,
+html[lang="fa"] select,
+html[lang="fa"] table,
+html[lang="fa"] * {
+  font-family: var(--font-fa) !important;
+}
+
+html[lang="ps"] .app-sidebar,
+html[lang="ps"] .app-header,
+html[lang="ps"] .app-main,
+html[lang="ps"] .app-card,
+html[lang="ps"] button,
+html[lang="ps"] input,
+html[lang="ps"] select,
+html[lang="ps"] table,
+html[lang="ps"] * {
+  font-family: var(--font-ps) !important;
 }

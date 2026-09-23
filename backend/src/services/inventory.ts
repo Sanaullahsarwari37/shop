@@ -24,7 +24,7 @@ export function calculateNewAvgCost(
 ): string {
   if (oldQty + newQty === 0) return toMoney(newCost);
   const totalValue = parseMoney(oldAvg) * oldQty + parseMoney(newCost) * newQty;
-  return (totalValue / (oldQty + newQty)).toFixed(2);
+  return toMoney(totalValue / (oldQty + newQty));
 }
 
 /**
@@ -107,7 +107,7 @@ export async function recordPurchase(input: {
 export async function recordSale(input: {
   type: "cash" | "debit";
   customerId?: number;
-  items: Array<{ productId: number; quantity: number; unitPrice?: string }>;
+  items: Array<{ productId: number; quantity: number; unitPrice?: string | number }>;
   note?: string;
   reference?: string;
   soldAt?: Date;
@@ -284,7 +284,7 @@ export async function recordLoan(input: {
   customerId: number;
   cashAmount?: string;
   note?: string;
-  items?: Array<{ productId: number; quantity: number; unitPrice?: string }>;
+  items?: Array<{ productId: number; quantity: number; unitPrice?: string | number }>;
 }) {
   const cash = toMoney(input.cashAmount || "0");
   const hasCash = parseMoney(cash) > 0;
@@ -351,4 +351,147 @@ export async function recordLoan(input: {
   results.totalAdded = totalAdded;
   results.newBalance = updated?.outstandingBalance ?? "0";
   return results;
+}
+
+/**
+ * Delete a full purchase: reverse stock for each line, remove items + purchase.
+ * Rejects if any product would go negative (stock already sold).
+ */
+export async function deletePurchase(purchaseId: number) {
+  return await db.transaction(async (tx) => {
+    const [purchase] = await tx
+      .select()
+      .from(purchases)
+      .where(eq(purchases.id, purchaseId));
+    if (!purchase) throw new Error("Purchase not found");
+
+    const items = await tx
+      .select()
+      .from(purchaseItems)
+      .where(eq(purchaseItems.purchaseId, purchaseId));
+
+    for (const item of items) {
+      const [product] = await tx
+        .select()
+        .from(products)
+        .where(eq(products.id, item.productId))
+        .for("update");
+      if (!product) continue;
+      if (product.quantity < item.quantity) {
+        throw new Error(
+          `Cannot delete purchase: stock for product is lower than purchased qty (already sold). Available: ${product.quantity}, needed: ${item.quantity}`
+        );
+      }
+      await tx
+        .update(products)
+        .set({
+          quantity: product.quantity - item.quantity,
+          updatedAt: new Date(),
+        })
+        .where(eq(products.id, item.productId));
+    }
+
+    await tx.delete(purchaseItems).where(eq(purchaseItems.purchaseId, purchaseId));
+    await tx.delete(purchases).where(eq(purchases.id, purchaseId));
+    return { success: true, purchaseId };
+  });
+}
+
+/**
+ * Delete a single purchase line item; update purchase total or remove empty purchase.
+ */
+export async function deletePurchaseItem(itemId: number) {
+  return await db.transaction(async (tx) => {
+    const [item] = await tx
+      .select()
+      .from(purchaseItems)
+      .where(eq(purchaseItems.id, itemId));
+    if (!item) throw new Error("Purchase item not found");
+
+    const [product] = await tx
+      .select()
+      .from(products)
+      .where(eq(products.id, item.productId))
+      .for("update");
+    if (product) {
+      if (product.quantity < item.quantity) {
+        throw new Error(
+          `Cannot delete item: stock already sold. Available: ${product.quantity}`
+        );
+      }
+      await tx
+        .update(products)
+        .set({
+          quantity: product.quantity - item.quantity,
+          updatedAt: new Date(),
+        })
+        .where(eq(products.id, item.productId));
+    }
+
+    await tx.delete(purchaseItems).where(eq(purchaseItems.id, itemId));
+
+    const remaining = await tx
+      .select()
+      .from(purchaseItems)
+      .where(eq(purchaseItems.purchaseId, item.purchaseId));
+
+    if (remaining.length === 0) {
+      await tx.delete(purchases).where(eq(purchases.id, item.purchaseId));
+    } else {
+      const newTotal = remaining.reduce(
+        (s, r) => moneyAdd(s, r.totalCost),
+        "0.00"
+      );
+      await tx
+        .update(purchases)
+        .set({ totalCost: newTotal })
+        .where(eq(purchases.id, item.purchaseId));
+    }
+    return { success: true, itemId };
+  });
+}
+
+/**
+ * Delete a sale: restore stock, reverse debit balance if needed, remove items + sale.
+ */
+export async function deleteSale(saleId: number) {
+  return await db.transaction(async (tx) => {
+    const [sale] = await tx.select().from(sales).where(eq(sales.id, saleId));
+    if (!sale) throw new Error("Sale not found");
+
+    const items = await tx
+      .select()
+      .from(saleItems)
+      .where(eq(saleItems.saleId, saleId));
+
+    for (const item of items) {
+      const [product] = await tx
+        .select()
+        .from(products)
+        .where(eq(products.id, item.productId))
+        .for("update");
+      if (!product) continue;
+      await tx
+        .update(products)
+        .set({
+          quantity: product.quantity + item.quantity,
+          updatedAt: new Date(),
+        })
+        .where(eq(products.id, item.productId));
+    }
+
+    if (sale.type === "debit" && sale.customerId) {
+      await tx
+        .update(customers)
+        .set({
+          outstandingBalance: sql`GREATEST(0, ${customers.outstandingBalance} - ${sale.totalRevenue})`,
+          updatedAt: new Date(),
+        })
+        .where(eq(customers.id, sale.customerId));
+    }
+
+    await tx.delete(saleItems).where(eq(saleItems.saleId, saleId));
+    await tx.delete(sales).where(eq(sales.id, saleId));
+    return { success: true, saleId };
+  });
 }

@@ -3,7 +3,7 @@ import { z } from "zod";
 import { eq, and, gte, lte, desc, sql } from "drizzle-orm";
 import { db } from "../db/index.js";
 import { sales, saleItems, products, customers } from "../db/schema.js";
-import { recordSale } from "../services/inventory.js";
+import { recordSale, deleteSale } from "../services/inventory.js";
 import { toMoney } from "../utils/money.js";
 
 const saleItemSchema = z.object({
@@ -109,4 +109,33 @@ export async function salesRoutes(app: FastifyInstance) {
 
     return { ...sale, items };
   });
+
+  app.delete("/api/sales/:id", async (req, reply) => {
+    try {
+      const id = Number((req.params as any).id);
+      const result = await deleteSale(id);
+      return result;
+    } catch (e: any) {
+      return reply.status(400).send({ error: e.message || "Failed to delete sale" });
+    }
+  });
+
+  app.post("/api/sales/delete-bulk", async (req, reply) => {
+    try {
+      const body = z.object({ ids: z.array(z.number().int().positive()).min(1) }).parse(req.body);
+      const results: { id: number; ok: boolean; error?: string }[] = [];
+      for (const id of body.ids) {
+        try {
+          await deleteSale(id);
+          results.push({ id, ok: true });
+        } catch (e: any) {
+          results.push({ id, ok: false, error: e.message });
+        }
+      }
+      return { results };
+    } catch (e: any) {
+      return reply.status(400).send({ error: e.message || "Bulk delete failed" });
+    }
+  });
+
 }

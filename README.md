@@ -3,8 +3,8 @@
 Professional inventory + sales + debit (Nasiya) system for a single local shop.
 
 **Stack (Sept 2026)**
-- Frontend: React 19 · TypeScript · Vite 6 · Tailwind CSS 4 · TanStack Query
-- Backend: Node.js · Fastify 5 · TypeScript · Drizzle ORM
+- Frontend: React 19.3 · TypeScript 5.9 · Vite 8 · Tailwind CSS 4.3 · TanStack Query 5
+- Backend: Node.js 20+ · Fastify 5.12 · TypeScript 5.9 · Drizzle ORM 0.45
 - Database: PostgreSQL 16+
 - Costing: Weighted Average Cost
 - Debit: Full ledger (never overwrite balances)
@@ -137,7 +137,7 @@ Change password or host in both `.env` and the `CREATE USER` step if needed.
 - Customer outstanding balance is a cached column kept in sync with the ledger
 - Profit = Revenue − COGS (weighted average cost at time of sale)
 - Localization is a lightweight custom i18n layer (no heavy runtime dependency)
-- No deprecated Drizzle / Fastify APIs — uses current Sept 2026 patterns:
+- Uses current Sept 2026 package versions:
   - `drizzle-kit` with `dialect: "postgresql"`
   - `postgres` (postgres.js) + `drizzle-orm/postgres-js`
   - Fastify 5 + `@fastify/cors` v10

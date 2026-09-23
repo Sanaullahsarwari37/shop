@@ -1,17 +1,19 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { api, formatMoney } from "../lib/api";
+import { api } from "../lib/api";
+import { useSettings } from "../contexts/SettingsContext";
 import {
   TrendingUp,
   Users,
   ShoppingCart,
   Wallet,
   CalendarDays,
+  HandCoins,
 } from "lucide-react";
-import { format } from "date-fns";
 import { toLocalYmd } from "../lib/dates";
 import { useLanguage } from "../i18n/LanguageContext";
 import { DatePicker } from "../components/ui/date-picker";
+import { cn } from "../lib/utils";
 
 function StatCard({
   title,
@@ -33,6 +35,7 @@ function StatCard({
     red: "bg-red-50 text-red-600 dark:bg-red-900/20 dark:text-red-400",
     violet: "bg-violet-50 text-violet-600 dark:bg-violet-900/20 dark:text-violet-400",
     slate: "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300",
+    emerald: "bg-emerald-50 text-emerald-600 dark:bg-emerald-900/20 dark:text-emerald-400",
   };
   return (
     <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-5">
@@ -52,10 +55,14 @@ function StatCard({
   );
 }
 
+type ProfitPeriod = "today" | "week" | "month";
+
 export default function Dashboard() {
   const { t } = useLanguage();
+  const { formatMoney } = useSettings();
   const todayStr = toLocalYmd();
   const [selectedDate, setSelectedDate] = useState(() => toLocalYmd());
+  const [profitPeriod, setProfitPeriod] = useState<ProfitPeriod>("today");
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["dashboard", selectedDate],
@@ -80,12 +87,22 @@ export default function Dashboard() {
 
   const d = data;
   const isToday = d.isTodaySelected;
+  const pp = d.profitPeriods || {};
+  const periodData =
+    profitPeriod === "week" ? pp.week : profitPeriod === "month" ? pp.month : pp.today;
+
+  const periodLabel =
+    profitPeriod === "week"
+      ? t("dashboard.profitWeek")
+      : profitPeriod === "month"
+        ? t("dashboard.profitMonth")
+        : t("dashboard.profitToday");
 
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">{t("dashboard.title")}</h1>
+          <h1 className="text-kpi text-2xl font-semibold tracking-tight">{t("dashboard.title")}</h1>
           <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
             {t("dashboard.subtitle")}
           </p>
@@ -98,7 +115,7 @@ export default function Dashboard() {
         />
       </div>
 
-      {/* TODAY — always separate */}
+      {/* TODAY cards */}
       <div>
         <div className="flex items-center gap-2 mb-3">
           <CalendarDays size={16} className="text-primary-600" />
@@ -117,16 +134,16 @@ export default function Dashboard() {
           <StatCard
             title={t("dashboard.todayProfit")}
             value={formatMoney(d.today.profit)}
-            subtitle={`Cost ${formatMoney(d.today.cost)}`}
+            subtitle={`${d.today.transactions} ${t("dashboard.transactions") || "transactions"}`}
             icon={TrendingUp}
             accent="green"
           />
           <StatCard
-            title={t("dashboard.totalCredit")}
-            value={formatMoney(d.today.debit)}
-            subtitle={`${d.today.debitTransactions} debit`}
-            icon={Wallet}
-            accent="violet"
+            title={t("dashboard.collectedDebit")}
+            value={formatMoney(d.collectedDebit?.today ?? d.today.paymentsCollected ?? "0")}
+            subtitle={`${d.collectedDebit?.todayCount ?? d.today.paymentCount ?? 0} ${t("customers.payment")}`}
+            icon={HandCoins}
+            accent="emerald"
           />
           <StatCard
             title={t("dashboard.outstandingDebt")}
@@ -138,24 +155,58 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Debt collected today */}
-      {(d.today.paymentCount > 0 || parseFloat(d.today.paymentsCollected || "0") > 0) && (
-        <div className="bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 rounded-xl p-4 flex flex-wrap items-center justify-between gap-2">
+      {/* Profit performance by period */}
+      <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
           <div>
-            <p className="text-sm font-medium text-emerald-800 dark:text-emerald-300">
-              {t("dashboard.debtCollected") || "Debt collected today"}
-            </p>
-            <p className="text-xs text-emerald-700/80 dark:text-emerald-400/80 mt-0.5">
-              {d.today.paymentCount} {t("customers.payment")} · {t("customers.remaining")} {t("common.total").toLowerCase()} reduced
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">
+              {t("dashboard.profitPerformance")}
+            </h2>
+            <p className="text-xs text-slate-500 mt-0.5">{t("dashboard.profitPerformanceHint")}</p>
+          </div>
+          <div className="flex gap-1 rounded-lg border border-slate-200 dark:border-slate-700 p-0.5">
+            {(["today", "week", "month"] as ProfitPeriod[]).map((p) => (
+              <button
+                key={p}
+                type="button"
+                onClick={() => setProfitPeriod(p)}
+                className={cn(
+                  "px-3 py-1.5 rounded-md text-xs font-medium transition-colors",
+                  profitPeriod === p
+                    ? "bg-primary-600 text-white"
+                    : "text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800"
+                )}
+              >
+                {p === "today"
+                  ? t("dashboard.periodToday")
+                  : p === "week"
+                    ? t("dashboard.periodWeek")
+                    : t("dashboard.periodMonth")}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div>
+            <p className="text-xs text-slate-500">{periodLabel}</p>
+            <p className="text-kpi text-2xl font-semibold text-emerald-600 mt-1">
+              {formatMoney(periodData?.profit ?? "0")}
             </p>
           </div>
-          <p className="text-xl font-semibold text-emerald-700 dark:text-emerald-300">
-            −{formatMoney(d.today.paymentsCollected)}
-          </p>
+          <div>
+            <p className="text-xs text-slate-500">{t("dashboard.periodRevenue")}</p>
+            <p className="text-xl font-semibold mt-1">
+              {formatMoney(periodData?.revenue ?? "0")}
+            </p>
+          </div>
+          <div>
+            <p className="text-xs text-slate-500">{t("dashboard.transactions")}</p>
+            <p className="text-xl font-semibold mt-1">{periodData?.count ?? 0}</p>
+          </div>
         </div>
-      )}
+      </div>
 
-      {/* Yesterday quick comparison */}
+      {/* Yesterday + Stock */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-4">
           <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">
@@ -194,14 +245,14 @@ export default function Dashboard() {
             <StatCard
               title={t("dashboard.todayProfit")}
               value={formatMoney(d.selected.profit)}
-              subtitle={`Cost ${formatMoney(d.selected.cost)}`}
+              subtitle={`${d.selected.transactions} tx`}
               icon={TrendingUp}
               accent="slate"
             />
             <StatCard
-              title={t("dashboard.totalCredit")}
-              value={formatMoney(d.selected.debit)}
-              subtitle={`${d.selected.debitTransactions}`}
+              title={t("dashboard.collectedDebit")}
+              value={formatMoney(d.selected.paymentsCollected || "0")}
+              subtitle={`${d.selected.paymentCount || 0} ${t("customers.payment")}`}
               icon={Wallet}
               accent="slate"
             />
@@ -218,71 +269,22 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* Sales list for selected day */}
-      <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 overflow-hidden">
-        <div className="px-5 py-3 border-b border-slate-200 dark:border-slate-800 font-medium flex items-center justify-between">
-          <span>
-            {isToday
-              ? t("dashboard.recentSales")
-              : `${t("dashboard.selectedDay") || "Day"} ${d.selected.date}`}
-          </span>
-          <span className="text-xs text-slate-500 font-normal">
-            {(d.daySalesList || []).length} records
-          </span>
-        </div>
-        {(d.daySalesList || []).length === 0 ? (
-          <p className="p-8 text-center text-slate-500 text-sm">{t("common.noData")}</p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-slate-200 dark:border-slate-800 text-start text-slate-500">
-                  <th className="px-5 py-2 font-medium">{t("common.date")}</th>
-                  <th className="px-5 py-2 font-medium">{t("products.productName")}</th>
-                  <th className="px-5 py-2 font-medium">{t("sales.type")}</th>
-                  <th className="px-5 py-2 font-medium">{t("sales.customer")}</th>
-                  <th className="px-5 py-2 font-medium text-end">{t("sales.revenue")}</th>
-                  <th className="px-5 py-2 font-medium text-end">{t("sales.profit")}</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                {(d.daySalesList || []).map((s: any) => {
-                  const isPay = s.kind === "payment" || s.type === "payment";
-                  const when = s.at || s.soldAt;
-                  const amount = s.amount ?? s.totalRevenue;
-                  const profit = s.profit ?? s.totalProfit;
-                  return (
-                  <tr key={s.id}>
-                    <td className="px-5 py-2 text-slate-500">
-                      {format(new Date(when), "HH:mm")}
-                    </td>
-                    <td className="px-5 py-2 font-medium max-w-[200px] truncate" title={s.itemNames || s.note || ""}>
-                      {s.itemNames || s.note || "—"}
-                    </td>
-                    <td className="px-5 py-2">
-                      {isPay ? (
-                        <span className="text-emerald-600 font-medium">{t("customers.payment")}</span>
-                      ) : s.type === "debit" ? (
-                        t("sales.debit")
-                      ) : (
-                        t("sales.cash")
-                      )}
-                    </td>
-                    <td className="px-5 py-2">{s.customerName || "—"}</td>
-                    <td className={`px-5 py-2 text-end font-medium ${isPay ? "text-emerald-600" : ""}`}>
-                      {isPay ? "−" : ""}{formatMoney(amount)}
-                    </td>
-                    <td className="px-5 py-2 text-end text-emerald-600">
-                      {isPay ? "—" : formatMoney(profit)}
-                    </td>
-                  </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+      {/* Top debtors (compact) */}
+      {(d.topDebtors || []).length > 0 && (
+        <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 overflow-hidden">
+          <div className="px-5 py-3 border-b border-slate-200 dark:border-slate-800 font-medium text-sm">
+            {t("dashboard.topDebtors") || "Top debtors"}
           </div>
-        )}
-      </div>
+          <ul className="divide-y divide-slate-100 dark:divide-slate-800">
+            {(d.topDebtors || []).map((c: any) => (
+              <li key={c.id} className="px-5 py-2.5 flex justify-between text-sm">
+                <span className="font-medium">{c.name}</span>
+                <span className="text-amber-600 font-medium">{formatMoney(c.outstandingBalance)}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
     </div>
   );
 }

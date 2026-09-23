@@ -5,7 +5,7 @@ import fa from "./fa";
 export type Locale = "en" | "ps" | "fa";
 export type Translations = typeof en;
 
-const resources: Record<Locale, Translations> = { en, ps, fa };
+const resources: Record<Locale, any> = { en, ps, fa };
 
 export const locales: { code: Locale; label: string; dir: "ltr" | "rtl" }[] = [
   { code: "en", label: "English", dir: "ltr" },
@@ -23,12 +23,20 @@ export function t(
   fallback?: string
 ): string {
   const parts = path.split(".");
-  let cur: any = resources[locale] ?? resources.en;
-  for (const p of parts) {
-    if (cur == null || typeof cur !== "object") return fallback ?? path;
-    cur = cur[p];
+  // Prefer current locale, fall back to English for missing keys
+  for (const loc of [locale, "en" as Locale]) {
+    let cur: any = resources[loc];
+    let ok = true;
+    for (const p of parts) {
+      if (cur == null || typeof cur !== "object") {
+        ok = false;
+        break;
+      }
+      cur = cur[p];
+    }
+    if (ok && typeof cur === "string") return cur;
   }
-  return typeof cur === "string" ? cur : fallback ?? path;
+  return fallback ?? path;
 }
 
 export function getTranslations(locale: Locale): Translations {

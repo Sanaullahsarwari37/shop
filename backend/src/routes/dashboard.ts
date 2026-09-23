@@ -11,7 +11,6 @@ import {
 } from "../db/schema.js";
 
 function dayBounds(dateStr?: string) {
-  // Prefer local calendar day (avoid UTC midnight shifting the day)
   let d: Date;
   if (dateStr && /^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
     const [y, m, day] = dateStr.split("-").map(Number);
@@ -76,11 +75,23 @@ async function daySalesStats(start: Date, end: Date) {
   };
 }
 
+async function periodProfit(start: Date, end: Date) {
+  const [row] = await db
+    .select({
+      profit: sql<string>`coalesce(sum(${sales.totalProfit}), 0)::numeric(12,2)`,
+      revenue: sql<string>`coalesce(sum(${sales.totalRevenue}), 0)::numeric(12,2)`,
+      count: sql<number>`count(*)::int`,
+    })
+    .from(sales)
+    .where(and(gte(sales.soldAt, start), lte(sales.soldAt, end)));
+  return row;
+}
+
 export async function dashboardRoutes(app: FastifyInstance) {
   app.get("/api/dashboard", async (req) => {
-    const q = (req.query || {}) as { date?: string };
-    const todayBounds = dayBounds(); // always real today
-    const selectedBounds = dayBounds(q.date); // selected day or today
+    const q = (req.query || {}) as { date?: string; period?: string };
+    const todayBounds = dayBounds();
+    const selectedBounds = dayBounds(q.date);
     const yesterdayDate = shiftDay(todayBounds.date, -1);
     const yesterdayBounds = dayBounds(toYmd(yesterdayDate));
     const prevSelectedDate = shiftDay(selectedBounds.date, -1);
@@ -116,6 +127,16 @@ export async function dashboardRoutes(app: FastifyInstance) {
       prevSelectedBounds.end
     );
 
+    // Profit periods: today, 7 days, 30 days
+    const weekStart = shiftDay(todayBounds.date, -6);
+    weekStart.setHours(0, 0, 0, 0);
+    const monthStart = shiftDay(todayBounds.date, -29);
+    monthStart.setHours(0, 0, 0, 0);
+
+    const profitToday = await periodProfit(todayBounds.start, todayBounds.end);
+    const profitWeek = await periodProfit(weekStart, todayBounds.end);
+    const profitMonth = await periodProfit(monthStart, todayBounds.end);
+
     const [outstanding] = await db
       .select({
         total: sql<string>`coalesce(sum(${customers.outstandingBalance}), 0)::numeric(12,2)`,
@@ -140,56 +161,7 @@ export async function dashboardRoutes(app: FastifyInstance) {
       .orderBy(products.quantity)
       .limit(10);
 
-    // Sales for the selected day
-    const daySalesRaw = await db
-      .select({
-        id: sales.id,
-        type: sales.type,
-        totalRevenue: sales.totalRevenue,
-        totalProfit: sales.totalProfit,
-        soldAt: sales.soldAt,
-        customerName: customers.name,
-        note: sales.note,
-        itemNames: sql<string>`coalesce(
-          (select string_agg(p.name || ' ×' || si.quantity::text, ', ')
-           from sale_items si
-           join products p on p.id = si.product_id
-           where si.sale_id = ${sales.id}),
-          coalesce(${sales.note}, '—')
-        )`,
-      })
-      .from(sales)
-      .leftJoin(customers, eq(sales.customerId, customers.id))
-      .where(
-        and(
-          gte(sales.soldAt, selectedBounds.start),
-          lte(sales.soldAt, selectedBounds.end)
-        )
-      )
-      .orderBy(desc(sales.soldAt))
-      .limit(50);
-
-    // Debt payments (return of loan) for the selected day — decreases outstanding
-    const dayPaymentsRaw = await db
-      .select({
-        id: payments.id,
-        amount: payments.amount,
-        note: payments.note,
-        paidAt: payments.paidAt,
-        customerName: customers.name,
-      })
-      .from(payments)
-      .leftJoin(customers, eq(payments.customerId, customers.id))
-      .where(
-        and(
-          gte(payments.paidAt, selectedBounds.start),
-          lte(payments.paidAt, selectedBounds.end)
-        )
-      )
-      .orderBy(desc(payments.paidAt))
-      .limit(50);
-
-    // Today's payments total (cash collected against debt)
+    // Today's payments total (collected debit)
     const [todayPayments] = await db
       .select({
         total: sql<string>`coalesce(sum(${payments.amount}), 0)::numeric(12,2)`,
@@ -216,53 +188,13 @@ export async function dashboardRoutes(app: FastifyInstance) {
         )
       );
 
-    // Unified day activity: sales + debt payments
-    const daySalesList = [
-      ...daySalesRaw.map((s) => ({
-        kind: "sale" as const,
-        id: `sale-${s.id}`,
-        type: s.type,
-        itemNames: s.itemNames,
-        note: s.note,
-        customerName: s.customerName,
-        amount: s.totalRevenue,
-        profit: s.totalProfit,
-        at: s.soldAt,
-      })),
-      ...dayPaymentsRaw.map((p) => ({
-        kind: "payment" as const,
-        id: `pay-${p.id}`,
-        type: "payment",
-        itemNames: p.note || "Debt payment",
-        note: p.note,
-        customerName: p.customerName,
-        amount: p.amount,
-        profit: "0",
-        at: p.paidAt,
-      })),
-    ].sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime());
-
-    const recentSales = await db
+    // All-time collected (optional summary)
+    const [allCollected] = await db
       .select({
-        id: sales.id,
-        type: sales.type,
-        totalRevenue: sales.totalRevenue,
-        totalProfit: sales.totalProfit,
-        soldAt: sales.soldAt,
-        customerName: customers.name,
-        note: sales.note,
-        itemNames: sql<string>`coalesce(
-          (select string_agg(p.name || ' ×' || si.quantity::text, ', ')
-           from sale_items si
-           join products p on p.id = si.product_id
-           where si.sale_id = ${sales.id}),
-          coalesce(${sales.note}, '—')
-        )`,
+        total: sql<string>`coalesce(sum(${payments.amount}), 0)::numeric(12,2)`,
+        count: sql<number>`count(*)::int`,
       })
-      .from(sales)
-      .leftJoin(customers, eq(sales.customerId, customers.id))
-      .orderBy(desc(sales.soldAt))
-      .limit(8);
+      .from(payments);
 
     const topDebtors = await db
       .select({
@@ -275,7 +207,6 @@ export async function dashboardRoutes(app: FastifyInstance) {
       .orderBy(desc(customers.outstandingBalance))
       .limit(5);
 
-    // Days that have any sales (for calendar markers) — last 90 days
     const activeDays = await db
       .select({
         day: sql<string>`to_char(${sales.soldAt}, 'YYYY-MM-DD')`,
@@ -294,14 +225,12 @@ export async function dashboardRoutes(app: FastifyInstance) {
         stockValue: inv.stockValue,
         potentialRevenue: inv.potentialRevenue,
       },
-      /** Always real calendar-today — never mixed with selected date */
       today: {
         ...today,
         paymentsCollected: todayPayments.total,
         paymentCount: todayPayments.count,
       },
       yesterday,
-      /** Stats for the date chosen on the calendar */
       selected: {
         date: toYmd(selectedBounds.date),
         ...selected,
@@ -318,9 +247,19 @@ export async function dashboardRoutes(app: FastifyInstance) {
         total: outstanding.total,
         customers: outstanding.customers,
       },
+      /** Money previously owed that was actually collected */
+      collectedDebit: {
+        today: todayPayments.total,
+        todayCount: todayPayments.count,
+        allTime: allCollected.total,
+        allTimeCount: allCollected.count,
+      },
+      profitPeriods: {
+        today: profitToday,
+        week: profitWeek,
+        month: profitMonth,
+      },
       lowStockList,
-      daySalesList,
-      recentSales,
       topDebtors,
     };
   });

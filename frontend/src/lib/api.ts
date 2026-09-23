@@ -8,7 +8,6 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
     ...(options?.headers as Record<string, string> | undefined),
   };
 
-  // Only send JSON content-type when there is a body (fixes Fastify DELETE empty-body error)
   if (hasBody && !headers["Content-Type"]) {
     headers["Content-Type"] = "application/json";
   }
@@ -24,7 +23,6 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
     throw new Error(err.error || "Request failed");
   }
 
-  // Some DELETE endpoints return empty body
   const text = await res.text();
   if (!text) return {} as T;
   try {
@@ -35,8 +33,11 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 }
 
 export const api = {
-  getDashboard: (date?: string) => {
-    const q = date ? `?date=${encodeURIComponent(date)}` : "";
+  getDashboard: (date?: string, period?: string) => {
+    const params = new URLSearchParams();
+    if (date) params.set("date", date);
+    if (period) params.set("period", period);
+    const q = params.toString() ? `?${params}` : "";
     return request<any>(`/dashboard${q}`);
   },
 
@@ -54,6 +55,18 @@ export const api = {
     }),
   deleteProduct: (id: number) =>
     request<any>(`/products/${id}`, { method: "DELETE" }),
+  deleteProductsBulk: async (ids: number[]) => {
+    const results: { id: number; ok: boolean; error?: string }[] = [];
+    for (const id of ids) {
+      try {
+        await request<any>(`/products/${id}`, { method: "DELETE" });
+        results.push({ id, ok: true });
+      } catch (e: any) {
+        results.push({ id, ok: false, error: e?.message || "Failed" });
+      }
+    }
+    return { results };
+  },
 
   getCategories: () => request<any[]>("/categories"),
   createCategory: (data: any) =>
@@ -63,8 +76,24 @@ export const api = {
       method: "PATCH",
       body: JSON.stringify(data),
     }),
-  deleteCategory: (id: number) =>
-    request<any>(`/categories/${id}`, { method: "DELETE" }),
+  deleteCategory: (id: number, force = false) =>
+    request<any>(`/categories/${id}${force ? "?force=true" : ""}`, {
+      method: "DELETE",
+    }),
+  deleteCategoriesBulk: async (ids: number[], force = true) => {
+    const results: { id: number; ok: boolean; error?: string }[] = [];
+    for (const id of ids) {
+      try {
+        await request<any>(`/categories/${id}${force ? "?force=true" : ""}`, {
+          method: "DELETE",
+        });
+        results.push({ id, ok: true });
+      } catch (e: any) {
+        results.push({ id, ok: false, error: e?.message || "Failed" });
+      }
+    }
+    return { results };
+  },
 
   getSales: (params?: Record<string, string>) => {
     const q = params ? "?" + new URLSearchParams(params).toString() : "";
@@ -73,11 +102,27 @@ export const api = {
   createSale: (data: any) =>
     request<any>("/sales", { method: "POST", body: JSON.stringify(data) }),
   getSale: (id: number) => request<any>(`/sales/${id}`),
+  deleteSale: (id: number) =>
+    request<any>(`/sales/${id}`, { method: "DELETE" }),
+  deleteSalesBulk: (ids: number[]) =>
+    request<any>("/sales/delete-bulk", {
+      method: "POST",
+      body: JSON.stringify({ ids }),
+    }),
 
   getPurchases: () => request<any[]>("/purchases"),
   createPurchase: (data: any) =>
     request<any>("/purchases", { method: "POST", body: JSON.stringify(data) }),
   getPurchase: (id: number) => request<any>(`/purchases/${id}`),
+  deletePurchase: (id: number) =>
+    request<any>(`/purchases/${id}`, { method: "DELETE" }),
+  deletePurchaseItem: (id: number) =>
+    request<any>(`/purchase-items/${id}`, { method: "DELETE" }),
+  deletePurchasesBulk: (ids: number[]) =>
+    request<any>("/purchases/delete-bulk", {
+      method: "POST",
+      body: JSON.stringify({ ids }),
+    }),
 
   getCustomers: (params?: Record<string, string>) => {
     const q = params ? "?" + new URLSearchParams(params).toString() : "";
@@ -93,6 +138,18 @@ export const api = {
     }),
   deleteCustomer: (id: number) =>
     request<any>(`/customers/${id}`, { method: "DELETE" }),
+  deleteCustomersBulk: async (ids: number[]) => {
+    const results: { id: number; ok: boolean; error?: string }[] = [];
+    for (const id of ids) {
+      try {
+        await request<any>(`/customers/${id}`, { method: "DELETE" });
+        results.push({ id, ok: true });
+      } catch (e: any) {
+        results.push({ id, ok: false, error: e?.message || "Failed" });
+      }
+    }
+    return { results };
+  },
   recordLoan: (id: number, data: any) =>
     request<any>(`/customers/${id}/loans`, {
       method: "POST",
@@ -110,6 +167,7 @@ export const api = {
   },
 };
 
+/** @deprecated Prefer useSettings().formatMoney — kept for gradual migration */
 export function formatMoney(value: string | number, symbol = "؋") {
   const n = typeof value === "string" ? parseFloat(value) : value;
   if (isNaN(n)) return `${symbol} 0.00`;

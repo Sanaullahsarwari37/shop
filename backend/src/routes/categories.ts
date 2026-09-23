@@ -1,8 +1,14 @@
 import { FastifyInstance } from "fastify";
 import { z } from "zod";
-import { eq, sql } from "drizzle-orm";
+import { eq, sql, inArray } from "drizzle-orm";
 import { db } from "../db/index.js";
-import { categories, products } from "../db/schema.js";
+import {
+  categories,
+  products,
+  purchaseItems,
+  saleItems,
+  sales,
+} from "../db/schema.js";
 import { toMoney } from "../utils/money.js";
 
 const categorySchema = z.object({
@@ -56,19 +62,45 @@ export async function categoryRoutes(app: FastifyInstance) {
     return updated;
   });
 
+  /**
+   * Delete category.
+   * Query ?force=true also deletes all products in the category
+   * (and their related purchase/sale line items; empty sales cleaned up).
+   */
   app.delete("/api/categories/:id", async (req, reply) => {
     const id = Number((req.params as any).id);
-    const [count] = await db
-      .select({ c: sql<number>`count(*)::int` })
+    const force = (req.query as any)?.force === "true" || (req.query as any)?.force === true;
+
+    const productRows = await db
+      .select({ id: products.id })
       .from(products)
       .where(eq(products.categoryId, id));
-    if (count.c > 0) {
+
+    if (productRows.length > 0 && !force) {
       return reply.status(400).send({
         error:
-          "Unable to delete this category because products are still assigned to it.",
+          "Category has products. Delete products first, or use force delete to remove category and all related products/history.",
+        productCount: productRows.length,
       });
     }
-    await db.delete(categories).where(eq(categories.id, id));
-    return { success: true };
+
+    try {
+      await db.transaction(async (tx) => {
+        if (productRows.length > 0) {
+          const pids = productRows.map((p) => p.id);
+          await tx.delete(saleItems).where(inArray(saleItems.productId, pids));
+          await tx.delete(purchaseItems).where(inArray(purchaseItems.productId, pids));
+          // remove sales with no remaining items
+          await tx.execute(sql`
+            DELETE FROM sales WHERE id NOT IN (SELECT DISTINCT sale_id FROM sale_items)
+          `);
+          await tx.delete(products).where(inArray(products.id, pids));
+        }
+        await tx.delete(categories).where(eq(categories.id, id));
+      });
+      return { success: true };
+    } catch (e: any) {
+      return reply.status(400).send({ error: e.message || "Failed to delete category" });
+    }
   });
 }

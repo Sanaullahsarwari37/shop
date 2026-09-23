@@ -19,32 +19,19 @@ import {
 import { useState, useEffect } from "react";
 import { cn } from "../lib/utils";
 import { useLanguage } from "../i18n/LanguageContext";
+import { useSettings } from "../contexts/SettingsContext";
 import type { Locale } from "../i18n";
 
 export default function Layout() {
   const { t, locale, setLocale, dir, locales } = useLanguage();
-  const [dark, setDark] = useState(() =>
-    localStorage.getItem("theme") === "dark" ||
-    (!localStorage.getItem("theme") &&
-      window.matchMedia("(prefers-color-scheme: dark)").matches)
-  );
+  const { settings, setDarkMode } = useSettings();
+  const dark = settings.darkMode;
   const [mobileOpen, setMobileOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(
     () => localStorage.getItem("sidebar_collapsed") === "1"
   );
   const [langOpen, setLangOpen] = useState(false);
 
-  useEffect(() => {
-    const root = document.documentElement;
-    if (dark) {
-      root.classList.add("dark");
-      root.style.colorScheme = "dark";
-    } else {
-      root.classList.remove("dark");
-      root.style.colorScheme = "light";
-    }
-    localStorage.setItem("theme", dark ? "dark" : "light");
-  }, [dark]);
 
   useEffect(() => {
     localStorage.setItem("sidebar_collapsed", collapsed ? "1" : "0");
@@ -74,12 +61,11 @@ export default function Layout() {
   const sidebarW = collapsed ? "w-[72px]" : "w-64";
 
   return (
-    <div className="h-screen flex overflow-hidden bg-slate-50 dark:bg-slate-950">
+    <div className="h-screen flex overflow-hidden" style={{ backgroundColor: "var(--color-background)" }}>
       {/* Sidebar — fixed height, does not scroll with main content */}
       <aside
         className={cn(
-          "fixed inset-y-0 z-40 flex flex-col h-screen",
-          "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800",
+          "app-sidebar fixed inset-y-0 z-40 flex flex-col h-screen border",
           "transform transition-all duration-200",
           "lg:static lg:translate-x-0 lg:shrink-0",
           sidebarW,
@@ -93,7 +79,7 @@ export default function Layout() {
       >
         <div
           className={cn(
-            "flex items-center h-16 shrink-0 px-3 border-b border-slate-200 dark:border-slate-800",
+            "flex items-center h-16 shrink-0 px-3 border-b border-[var(--color-border)]",
             collapsed ? "justify-center" : "justify-between px-5"
           )}
         >
@@ -133,8 +119,8 @@ export default function Layout() {
                   "flex items-center gap-3 rounded-lg text-sm font-medium transition-colors",
                   collapsed ? "justify-center px-2 py-2.5" : "px-3 py-2.5",
                   isActive
-                    ? "bg-primary-50 text-primary-700 dark:bg-primary-900/30 dark:text-primary-300"
-                    : "text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
+                    ? "bg-[color-mix(in_srgb,var(--color-primary)_18%,transparent)] text-[var(--color-primary)] font-semibold"
+                    : "text-[var(--color-sidebar-fg)]/70 hover:bg-[color-mix(in_srgb,var(--color-foreground)_6%,transparent)] hover:text-[var(--color-sidebar-fg)]"
                 )
               }
             >
@@ -156,7 +142,7 @@ export default function Layout() {
 
       {/* Main column — only this area scrolls */}
       <div className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden">
-        <header className="sticky top-0 z-20 h-16 shrink-0 bg-white/80 dark:bg-slate-900/80 backdrop-blur border-b border-slate-200 dark:border-slate-800 flex items-center justify-between px-4 lg:px-6 gap-2">
+        <header className="app-header sticky top-0 z-20 h-14 sm:h-16 shrink-0 backdrop-blur border-b flex items-center justify-between px-3 sm:px-4 lg:px-6 gap-2">
           <div className="flex items-center gap-1">
             <button
               type="button"
@@ -214,7 +200,7 @@ export default function Layout() {
 
           <button
             type="button"
-            onClick={() => setDark(!dark)}
+            onClick={() => setDarkMode(!dark)}
             className="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
             title={t("settings.theme")}
           >
@@ -222,7 +208,7 @@ export default function Layout() {
           </button>
         </header>
 
-        <main className="flex-1 overflow-y-auto overflow-x-hidden p-4 lg:p-6 overscroll-contain">
+        <main className="app-main flex-1 overflow-y-auto overflow-x-hidden p-3 sm:p-4 lg:p-6 overscroll-contain">
           <Outlet />
         </main>
       </div>

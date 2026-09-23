@@ -1,20 +1,23 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { api, formatMoney } from "../lib/api";
+import { api } from "../lib/api";
+import { useSettings } from "../contexts/SettingsContext";
 import { Plus, Tags, Pencil, Trash2 } from "lucide-react";
 import { useLanguage } from "../i18n/LanguageContext";
 import { useToast } from "../components/Toast";
 import ConfirmDialog from "../components/ConfirmDialog";
+import { DeleteAllButton } from "../components/ListToolbar";
 
 export default function Categories() {
   const { t } = useLanguage();
+  const { formatMoney } = useSettings();
   const { toast } = useToast();
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [name, setName] = useState("");
   const [perPrice, setPerPrice] = useState("");
   const [description, setDescription] = useState("");
-  const [deleteTarget, setDeleteTarget] = useState<{ id: number; name: string } | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<{ id?: number; name?: string; force?: boolean; all?: boolean } | null>(null);
   const qc = useQueryClient();
 
   const { data: categories = [], isLoading } = useQuery({
@@ -52,15 +55,32 @@ export default function Categories() {
   });
 
   const deleteMut = useMutation({
-    mutationFn: (id: number) => api.deleteCategory(id),
+    mutationFn: async () => {
+      if (!deleteTarget) return;
+      if (deleteTarget.all) {
+        const ids = categories.map((c: any) => c.id as number);
+        const res = await api.deleteCategoriesBulk(ids, true);
+        const failed = (res.results || []).filter((r: any) => !r.ok);
+        if (failed.length) throw new Error(failed.map((f: any) => f.error).join("; "));
+      } else if (deleteTarget.id != null) {
+        await api.deleteCategory(deleteTarget.id, !!deleteTarget.force);
+      }
+    },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["categories"] });
       qc.invalidateQueries({ queryKey: ["products"] });
       qc.invalidateQueries({ queryKey: ["dashboard"] });
+      qc.invalidateQueries({ queryKey: ["purchases"] });
+      qc.invalidateQueries({ queryKey: ["sales"] });
       setDeleteTarget(null);
-      toast(t("categories.deleted"), "success");
+      toast(t("categories.deleted") || "Deleted", "success");
     },
-    onError: (e: Error) => toast(e.message, "error"),
+    onError: (e: Error) => {
+      if (!deleteTarget?.all && (e.message.toLowerCase().includes("product") || e.message.toLowerCase().includes("force"))) {
+        setDeleteTarget((prev) => (prev ? { ...prev, force: true } : prev));
+      }
+      toast(e.message, "error");
+    },
   });
 
   const openEdit = (c: any) => {
@@ -89,16 +109,23 @@ export default function Categories() {
           <h1 className="text-2xl font-semibold tracking-tight">{t("categories.title")}</h1>
           <p className="text-sm text-slate-500 mt-1">{t("categories.subtitle")}</p>
         </div>
-        <button
-          type="button"
-          onClick={() => {
-            reset();
-            setShowForm(true);
-          }}
-          className="inline-flex items-center gap-2 px-4 py-2.5 bg-primary-600 text-white rounded-lg text-sm font-medium"
-        >
-          <Plus size={16} /> {t("categories.addCategory")}
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <DeleteAllButton
+            label={t("common.deleteAll", "Delete all")}
+            count={categories.length}
+            onClick={() => setDeleteTarget({ all: true })}
+          />
+          <button
+            type="button"
+            onClick={() => {
+              reset();
+              setShowForm(true);
+            }}
+            className="inline-flex items-center gap-2 px-4 py-2.5 btn-primary rounded-xl text-sm font-semibold"
+          >
+            <Plus size={16} /> {t("categories.addCategory")}
+          </button>
+        </div>
       </div>
 
       {showForm && (
@@ -160,6 +187,7 @@ export default function Categories() {
             <thead>
               <tr className="border-b border-slate-200 dark:border-slate-800 text-start text-slate-500">
                 <th className="px-5 py-3 font-medium">{t("common.name")}</th>
+                <th className="px-5 py-3 font-medium">{t("categories.description")}</th>
                 <th className="px-5 py-3 font-medium text-end">{t("categories.perPrice")}</th>
                 <th className="px-5 py-3 font-medium text-end">{t("nav.products")}</th>
                 <th className="px-5 py-3 font-medium"></th>
@@ -169,6 +197,7 @@ export default function Categories() {
               {categories.map((c: any) => (
                 <tr key={c.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
                   <td className="px-5 py-3 font-medium">{c.name}</td>
+                  <td className="px-5 py-3 text-slate-500 max-w-[200px] truncate" title={c.description || ""}>{c.description || "—"}</td>
                   <td className="px-5 py-3 text-end">{formatMoney(c.perPrice || "0")}</td>
                   <td className="px-5 py-3 text-end">{c.productCount}</td>
                   <td className="px-5 py-3 text-end">
@@ -196,13 +225,19 @@ export default function Categories() {
       <ConfirmDialog
         open={deleteTarget != null}
         title={t("categories.deleteCategory")}
-        message={deleteTarget ? `${t("categories.confirmDelete")} (${deleteTarget.name})` : t("categories.confirmDelete")}
+        message={
+          deleteTarget?.all
+            ? (t("categories.confirmDeleteAll") || "Delete ALL categories and their products?")
+            : deleteTarget?.force
+              ? `Force delete "${deleteTarget.name}" and all its products + related history?`
+              : deleteTarget
+                ? `${t("categories.confirmDelete")} (${deleteTarget.name})`
+                : t("categories.confirmDelete")
+        }
         danger
         loading={deleteMut.isPending}
         onCancel={() => setDeleteTarget(null)}
-        onConfirm={() => {
-          if (deleteTarget) deleteMut.mutate(deleteTarget.id);
-        }}
+        onConfirm={() => deleteMut.mutate()}
       />
     </div>
   );
